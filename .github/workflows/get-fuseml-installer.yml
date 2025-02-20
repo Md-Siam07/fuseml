@@ -1,33 +1,66 @@
-name: Get fuseml-installer script
+name: get-fuseml-installer.yml
 on:
-  workflow_call:
-  pull_request:
-    branches:
-      - main
-      - release-*
-    paths:
-      - "install.sh"
   push:
     branches:
       - main
-      - release-*
-    paths:
-      - "install.sh"
+
 jobs:
   Test:
     runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-      fail-fast: false
     steps:
-      - name: Install kubectl
-        if: matrix.os == 'macos-latest'
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - if: matrix.os == 'macos-latest'
+        name: Install kubectl
         run: brew install kubectl
+      - id: measurement-2
+        name: Record Measurement After Install kubectl
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install kubectl
+          task: get-measurement
       - name: Checkout
         uses: actions/checkout@v2
       - name: Download latest fuseml-installer version
-        shell: bash
         run: ./install.sh
+        shell: bash
+      - id: measurement-5
+        name: Record Measurement After Download latest fuseml-installer version
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Download latest fuseml-installer version
+          task: get-measurement
       - name: Check fuseml-installer version
         run: fuseml-installer -v
+      - id: measurement-7
+        name: Record Measurement After Check fuseml-installer version
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Check fuseml-installer version
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption1
+          path: total_energy_consumption1.json
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest

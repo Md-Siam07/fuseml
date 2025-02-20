@@ -16,3 +16,4 @@ personal-setup
 /resources
 statik/*
 acceptance/acceptance.test
+venv/

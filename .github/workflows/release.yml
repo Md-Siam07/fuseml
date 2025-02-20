@@ -1,110 +1,220 @@
-name: Release-pipeline
-
+name: release.yml
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
 
 jobs:
-  test:
-    uses: fuseml/fuseml/.github/workflows/ci.yml@main
-
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
-      - name: Fetch Branch
-        id: branch
-        run: |
-          raw=$(git branch -r --contains ${{ github.ref }})
-          branch=${raw##*/}
-          echo "::set-output name=BRANCH_NAME::$branch"
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: "^1.16"
-      - name: Setup Ginkgo Test Framework
-        run: |
-          go install github.com/onsi/ginkgo/ginkgo
-      - name: Build FuseML
-        run: |
-          make release
-      - name: Generate Changelog
-        uses: heinrichreimer/github-changelog-generator-action@v2.1.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pullRequests: "false"
-          onlyLastTag: "true"
-          stripGeneratorNotice: "true"
-          issuesWoLabels: "true"
-          stripHeaders: "true"
-      - name: Release FuseML
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ./dist/*
-          body_path: ./CHANGELOG.md
-          prerelease: "true"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   docker-image:
     name: Docker image
-    runs-on: ubuntu-latest
     needs: test
+    runs-on: ubuntu-latest
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
       - name: Checkout repository
         uses: actions/checkout@v2
-
       - name: Set up Docker Buildx
         uses: crazy-max/ghaction-docker-buildx@v1
         with:
           version: latest
-
       - name: Login to GHCR
         uses: docker/login-action@v1
         with:
+          password: ${{ secrets.GITHUB_TOKEN }}
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: "^1.16"
-
+          go-version: ^1.16
       - name: Setup Ginkgo Test Framework
-        run: |
-          go install github.com/onsi/ginkgo/ginkgo
+        run: 'go install github.com/onsi/ginkgo/ginkgo
 
+          '
+      - id: measurement-6
+        name: Record Measurement After Setup Ginkgo Test Framework
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Setup Ginkgo Test Framework
+          task: get-measurement
       - name: Set image name and tag
-        run: |
-          case "${GITHUB_REF}" in
-            refs/heads/main)
-              TAG="dev"
-              ;;
-            refs/tags/v*)
-              TAG=${GITHUB_REF/refs\/tags\//}
-              ;;
-            *)
-              TAG=${GITHUB_REF/refs\/*\//}
-              ;;
-          esac
-          echo "IMG=ghcr.io/fuseml/fuseml-installer:${TAG}" >> $GITHUB_ENV
-
+        run: "case \"${GITHUB_REF}\" in\n  refs/heads/main)\n    TAG=\"dev\"\n   \
+          \ ;;\n  refs/tags/v*)\n    TAG=${GITHUB_REF/refs\\/tags\\//}\n    ;;\n \
+          \ *)\n    TAG=${GITHUB_REF/refs\\/*\\//}\n    ;;\nesac\necho \"IMG=ghcr.io/fuseml/fuseml-installer:${TAG}\"\
+          \ >> $GITHUB_ENV\n"
+      - id: measurement-8
+        name: Record Measurement After Set image name and tag
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Set image name and tag
+          task: get-measurement
       - name: Build image
-        run: |
-          make docker-build
+        run: 'make docker-build
 
+          '
+      - id: measurement-10
+        name: Record Measurement After Build image
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Build image
+          task: get-measurement
       - name: Push image
-        run: |
-          make docker-push
+        run: 'make docker-push
 
+          '
+      - id: measurement-12
+        name: Record Measurement After Push image
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Push image
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption3
+          path: total_energy_consumption3.json
   fetch-installer:
-    uses: fuseml/fuseml/.github/workflows/get-fuseml-installer.yml@main
     needs: release
+    steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption4
+          path: total_energy_consumption4.json
+    uses: fuseml/fuseml/.github/workflows/get-fuseml-installer.yml@main
+  release:
+    name: Release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - id: branch
+        name: Fetch Branch
+        run: 'raw=$(git branch -r --contains ${{ github.ref }})
+
+          branch=${raw##*/}
+
+          echo "::set-output name=BRANCH_NAME::$branch"
+
+          '
+      - id: measurement-3
+        name: Record Measurement After Fetch Branch
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Fetch Branch
+          task: get-measurement
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - name: Setup Ginkgo Test Framework
+        run: 'go install github.com/onsi/ginkgo/ginkgo
+
+          '
+      - id: measurement-6
+        name: Record Measurement After Setup Ginkgo Test Framework
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Setup Ginkgo Test Framework
+          task: get-measurement
+      - name: Build FuseML
+        run: 'make release
+
+          '
+      - id: measurement-8
+        name: Record Measurement After Build FuseML
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Build FuseML
+          task: get-measurement
+      - name: Generate Changelog
+        uses: heinrichreimer/github-changelog-generator-action@v2.1.1
+        with:
+          issuesWoLabels: 'true'
+          onlyLastTag: 'true'
+          pullRequests: 'false'
+          stripGeneratorNotice: 'true'
+          stripHeaders: 'true'
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: Release FuseML
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: ./CHANGELOG.md
+          files: ./dist/*
+          prerelease: 'true'
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption2
+          path: total_energy_consumption2.json
+  test:
+    steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption1
+          path: total_energy_consumption1.json
+    uses: fuseml/fuseml/.github/workflows/ci.yml@main

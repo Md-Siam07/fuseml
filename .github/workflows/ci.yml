@@ -1,143 +1,246 @@
-name: CI
-
+name: ci.yml
 on:
-  workflow_call:
-  workflow_dispatch:
   push:
     branches:
       - main
-      - release-*
-    paths-ignore:
-      - docs/**
-      - README.md
-      - LICENSE
-      - .gitlint
-      - .gitignore
-      - install.sh
-  pull_request:
-    branches:
-      - main
-      - release-*
-    paths-ignore:
-      - docs/**
-      - README.md
-      - LICENSE
-      - .gitlint
-      - .gitignore
-      - install.sh
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: "^1.16"
-
-      - name: Cache Go modules
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ github.job }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ github.job }}-${{ runner.os }}-go
-
-      - name: Lint
-        run: |
-          make lint
-
-  unit-tests:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: "^1.16"
-
-      - name: Cache Go modules
-        uses: actions/cache@v2
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ github.job }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ github.job }}-${{ runner.os }}-go-
-
-      - name: Setup Ginkgo Test Framework
-        run: |
-          go install github.com/onsi/ginkgo/ginkgo
-
-      - name: Run unit tests
-        run: |
-          make test
-
   e2e:
-    name: "${{ matrix.target }}"
+    name: ${{ matrix.target }}
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: ["kserve", "seldon", "seldon-triton", "ovms"]
-
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
       - name: Free disk space
-        run: |
-          echo "Available storage:"
-          df -h
-          echo
-          echo -n "  Removing: .NET (frees ~22GB)"
-          sudo rm -rf /usr/share/dotnet
-          echo "... done"
-          echo -n "  Removing: Android"
-          sudo rm -rf /usr/local/lib/android
-          echo "... done"
-          echo
-          echo "Available storage:"
+        run: 'echo "Available storage:"
+
           df -h
 
+          echo
+
+          echo -n "  Removing: .NET (frees ~22GB)"
+
+          sudo rm -rf /usr/share/dotnet
+
+          echo "... done"
+
+          echo -n "  Removing: Android"
+
+          sudo rm -rf /usr/local/lib/android
+
+          echo "... done"
+
+          echo
+
+          echo "Available storage:"
+
+          df -h
+
+          '
+      - id: measurement-2
+        name: Record Measurement After Free disk space
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Free disk space
+          task: get-measurement
       - name: Checkout repository
         uses: actions/checkout@v2
-
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: "^1.16"
-
+          go-version: ^1.16
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
-
       - name: Cache Go modules
         uses: actions/cache@v2
         with:
-          path: ~/go/pkg/mod
           key: ${{ github.job }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ github.job }}-${{ runner.os }}-go-
+          path: ~/go/pkg/mod
+          restore-keys: '${{ github.job }}-${{ runner.os }}-go-
 
+            '
       - name: Build fuseml-installer
         run: make build
-
+      - id: measurement-8
+        name: Record Measurement After Build fuseml-installer
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Build fuseml-installer
+          task: get-measurement
       - name: Install k3d
         run: make k3d-install
-
+      - id: measurement-10
+        name: Record Measurement After Install k3d
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install k3d
+          task: get-measurement
       - name: Create k8s cluster
         run: make new-test-cluster
-
+      - id: measurement-12
+        name: Record Measurement After Create k8s cluster
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Create k8s cluster
+          task: get-measurement
       - name: Install FuseML with "${{ matrix.target }}" extension
-        run: |
-          ./dist/fuseml-installer version
+        run: './dist/fuseml-installer version
+
           DEBUG=true make fuseml-install-with-${{ matrix.target }}
 
+          '
+      - id: measurement-14
+        name: Record Measurement After Install FuseML with "${{ matrix.target }}"
+          extension
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Install FuseML with "${{ matrix.target }}" extension
+          task: get-measurement
       - name: Run mlflow-e2e with "${{ matrix.target }}"
-        run: |
-          # extract the target branch in the context of which this job is running
+        run: '# extract the target branch in the context of which this job is running
+
           branch=${{ github.base_ref }}
+
           [[ -z "$branch" ]] && branch=${GITHUB_REF#refs/heads/}
+
           RELEASE_BRANCH=$branch make mlflow-${{ matrix.target }}-e2e
+
+          '
+      - id: measurement-16
+        name: Record Measurement After Run mlflow-e2e with "${{ matrix.target }}"
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Run mlflow-e2e with "${{ matrix.target }}"
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption3
+          path: total_energy_consumption3.json
+    strategy:
+      matrix:
+        target:
+          - kserve
+          - seldon
+          - seldon-triton
+          - ovms
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          key: ${{ github.job }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          path: ~/go/pkg/mod
+          restore-keys: '${{ github.job }}-${{ runner.os }}-go
+
+            '
+      - name: Lint
+        run: 'make lint
+
+          '
+      - id: measurement-5
+        name: Record Measurement After Lint
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Lint
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption1
+          path: total_energy_consumption1.json
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: start-measurement
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.16
+      - name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          key: ${{ github.job }}-${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          path: ~/go/pkg/mod
+          restore-keys: '${{ github.job }}-${{ runner.os }}-go-
+
+            '
+      - name: Setup Ginkgo Test Framework
+        run: 'go install github.com/onsi/ginkgo/ginkgo
+
+          '
+      - id: measurement-5
+        name: Record Measurement After Setup Ginkgo Test Framework
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Setup Ginkgo Test Framework
+          task: get-measurement
+      - name: Run unit tests
+        run: 'make test
+
+          '
+      - id: measurement-7
+        name: Record Measurement After Run unit tests
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          label: Run unit tests
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption2
+          path: total_energy_consumption2.json
